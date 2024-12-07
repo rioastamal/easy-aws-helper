@@ -2,6 +2,8 @@
 
 easy-aws-helper is a collection of shell functions designed to simplify working with Amazon EC2, Amazon Lightsail, and AWS CloudFormation. These functions provide an easy-to-use interface for common AWS tasks, making it more efficient for developers to manage their AWS resources.
 
+If you're primarily interested in up-to-date AWS pricing information without running the scripts yourself, you can refer to the [ec2-ondemand-prices](https://github.com/yourusername/ec2-ondemand-prices) GitHub repository. This project uses aws-easy-helper to automatically fetch and update EC2 on-demand and Lightsail pricing information across all regions on a daily basis. It provides a convenient way to access current AWS pricing data without the need to set up and run these scripts locally.
+
 ## Features
 
 - Retrieve and display information about EC2 instances
