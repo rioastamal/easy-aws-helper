@@ -11,6 +11,8 @@ If you're primarily interested in up-to-date AWS pricing information without run
 - Manage Lightsail instances, blueprints, and bundles
 - Generate CloudFormation templates for Lightsail instances
 - Explore EC2 instance types and their pricing
+- Obtain temporary AWS credentials
+- List and filter IAM roles
 
 ## Functions
 
@@ -27,6 +29,11 @@ If you're primarily interested in up-to-date AWS pricing information without run
 6. `get_lightsail_bundles`: Display Lightsail bundle information, including pricing.
 7. `generate_lightsail_cf`: Generate a CloudFormation template for a Lightsail instance.
 8. `create_lightsail_instance`: Create a Lightsail instance using CloudFormation.
+
+### AWS IAM and Security
+
+9. `get_aws_temp_credentials`: Obtain temporary AWS credentials by assuming a role.
+10. `get_iam_roles`: List and filter IAM roles.
 
 ## Usage
 
@@ -246,6 +253,51 @@ Possible arguments:
 - `--blueprint-id=<id>`: Specify the blueprint ID (default: ubuntu_24_04)
 - `--bundle-id=<id>`: Specify the bundle ID (default: micro_3_0)
 - `--stack-name=<name>`: Specify the CloudFormation stack name (default: lightsail-instance)
+
+### 9. Get temporary AWS credentials
+
+```bash
+get_aws_temp_credentials --role-arn=arn:aws:iam::123456789012:role/MyRole
+```
+
+Output:
+```
+# Run the following commands to set your AWS credentials:
+export AWS_ACCESS_KEY_ID='ASIAXXXXXXXXXXX'
+export AWS_SECRET_ACCESS_KEY='XXXXXXXXXXXXXXXXXXXXXXXX'
+export AWS_SESSION_TOKEN='XXXXXXXXXXXXXXXXXXXXXXXX'
+
+# Or copy and paste this one-liner:
+export AWS_ACCESS_KEY_ID='ASIAXXXXXXXXXXX' AWS_SECRET_ACCESS_KEY='XXXXXXXXXXXXXXXXXXXXXXXX' AWS_SESSION_TOKEN='XXXXXXXXXXXXXXXXXXXXXXXX'
+```
+
+Possible arguments:
+- `--role-arn=<arn>`: Specify the ARN of the role to assume (required)
+- `--session-name=<name>`: Specify the session name (default: TempSession)
+- `--duration=<seconds>`: Specify the duration of the temporary credentials in seconds (default: 3600)
+
+### 10. List IAM roles
+
+```bash
+get_iam_roles --limit=5
+```
+
+Output:
+```
++------------------+----------------------------------------+-------------------------+
+| Role Name        | ARN                                    | Created At              |
++------------------+----------------------------------------+-------------------------+
+| AdminRole        | arn:aws:iam::123456789012:role/AdminRole| 2023-05-01T10:00:00+00:00|
+| DeveloperRole    | arn:aws:iam::123456789012:role/DevRole  | 2023-05-02T11:30:00+00:00|
+| ReadOnlyRole     | arn:aws:iam::123456789012:role/ReadOnly| 2023-05-03T09:15:00+00:00|
++------------------+----------------------------------------+-------------------------+
+Total roles found: 3
+```
+
+Possible arguments:
+- `--limit=<number>`: Limit the number of results
+- `--role-name=<name>`: Filter by exact role name
+- `--role-name-like=<partial-name>`: Filter by partial role name
 
 ## Requirements
 
