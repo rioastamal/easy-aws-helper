@@ -847,3 +847,89 @@ get_aws_temp_credentials() {
     echo "# Or copy and paste this one-liner:"
     echo "export AWS_ACCESS_KEY_ID='$access_key_id' AWS_SECRET_ACCESS_KEY='$secret_access_key' AWS_SESSION_TOKEN='$session_token'"
 }
+
+get_iam_roles() {
+    local query='Roles[*].[RoleName,Arn,CreateDate]'
+    local limit=""
+    local role_name=""
+    local role_name_like=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --limit=*)
+                limit="--max-items ${1#*=}"
+                ;;
+            --role-name=*)
+                role_name="${1#*=}"
+                ;;
+            --role-name-like=*)
+                role_name_like="${1#*=}"
+                ;;
+            *)
+                echo "Invalid option. Usage examples:"
+                echo "get_iam_roles"
+                echo "get_iam_roles --limit=10"
+                echo "get_iam_roles --role-name=ExactRoleName"
+                echo "get_iam_roles --role-name-like=PartialRoleName"
+                return 1
+                ;;
+        esac
+        shift
+    done
+
+    local aws_command="aws iam list-roles"
+    local result=$(${aws_command} ${limit} --query "${query}" --output text)
+
+    # Define headers
+    local headers=("Role Name" "ARN" "Created At")
+
+    # Initialize arrays to store column widths and data
+    local -a widths data
+    for ((i=0; i<${#headers[@]}; i++)); do
+        widths[$i]=${#headers[$i]}
+    done
+
+    # Read data, apply filters if necessary, and calculate column widths
+    while IFS=$'\t' read -r name arn created_at; do
+        [ -z "$name" ] && continue  # Skip empty lines
+        
+        # Apply filters
+        if [ -n "$role_name" ] && [ "$name" != "$role_name" ]; then
+            continue
+        fi
+        if [ -n "$role_name_like" ] && [[ "${name,,}" != *"${role_name_like,,}"* ]]; then
+            continue
+        fi
+        
+        data+=("$name" "$arn" "$created_at")
+        [ ${#name} -gt ${widths[0]} ] && widths[0]=${#name}
+        [ ${#arn} -gt ${widths[1]} ] && widths[1]=${#arn}
+        [ ${#created_at} -gt ${widths[2]} ] && widths[2]=${#created_at}
+    done <<< "$result"
+
+    # Function to print a separator line
+    print_separator() {
+        local sep="+"
+        for width in "${widths[@]}"; do
+            sep+="-$(printf '%0.s-' $(seq 1 $width))-+"
+        done
+        echo "$sep"
+    }
+
+    # Print the table
+    print_separator
+    for ((i=0; i<${#headers[@]}; i++)); do
+        printf "| %-${widths[$i]}s " "${headers[$i]}"
+    done
+    echo "|"
+    print_separator
+
+    for ((i=0; i<${#data[@]}; i+=3)); do
+        printf "| %-${widths[0]}s | %-${widths[1]}s | %-${widths[2]}s |\n" "${data[$i]}" "${data[$i+1]}" "${data[$i+2]}"
+    done
+    print_separator
+
+    # Print the number of roles found
+    local role_count=$((${#data[@]} / 3))
+    echo "Total roles found: $role_count"
+}
