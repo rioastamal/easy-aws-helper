@@ -791,3 +791,59 @@ get_ec2_instance_types() {
     done
     print_separator
 }
+
+get_aws_temp_credentials() {
+    local role_arn=""
+    local session_name="TempSession"
+    local duration="3600"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --role-arn=*)
+                role_arn="${1#*=}"
+                ;;
+            --session-name=*)
+                session_name="${1#*=}"
+                ;;
+            --duration=*)
+                duration="${1#*=}"
+                ;;
+            *)
+                echo "Invalid option. Usage:"
+                echo "get_aws_temp_credentials --role-arn=<role_arn> [--session-name=<session_name>] [--duration=<duration_seconds>]"
+                return 1
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$role_arn" ]; then
+        echo "Error: --role-arn is required."
+        echo "Usage: get_aws_temp_credentials --role-arn=<role_arn> [--session-name=<session_name>] [--duration=<duration_seconds>]"
+        return 1
+    fi
+
+    local credentials=$(aws sts assume-role \
+        --role-arn "$role_arn" \
+        --role-session-name "$session_name" \
+        --duration-seconds "$duration" \
+        --query "Credentials.[AccessKeyId,SecretAccessKey,SessionToken]" \
+        --output text)
+
+    if [ $? -ne 0 ]; then
+        echo "Failed to assume role. Check your AWS configuration and permissions."
+        return 1
+    fi
+
+    local access_key_id=$(echo $credentials | awk '{print $1}')
+    local secret_access_key=$(echo $credentials | awk '{print $2}')
+    local session_token=$(echo $credentials | awk '{print $3}')
+
+    echo "# Run the following commands to set your AWS credentials:"
+    echo "export AWS_ACCESS_KEY_ID='$access_key_id'"
+    echo "export AWS_SECRET_ACCESS_KEY='$secret_access_key'"
+    echo "export AWS_SESSION_TOKEN='$session_token'"
+    echo ""
+    echo "# Or copy and paste this one-liner:"
+    echo "export AWS_ACCESS_KEY_ID='$access_key_id' AWS_SECRET_ACCESS_KEY='$secret_access_key' AWS_SESSION_TOKEN='$session_token'"
+}
