@@ -933,3 +933,144 @@ get_iam_roles() {
     local role_count=$((${#data[@]} / 3))
     echo "Total roles found: $role_count"
 }
+
+get_ec2_amis() {
+    local filters=()
+    local limit=""
+    local aws_command="aws ec2 describe-images --owners amazon"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --name=*)
+                filters+=("Name=name,Values=${1#*=}")
+                ;;
+            --name-like=*)
+                filters+=("Name=name,Values=*${1#*=}*")
+                ;;
+            --ami-id=*)
+                filters+=("Name=image-id,Values=${1#*=}")
+                ;;
+            --ami-id-like=*)
+                filters+=("Name=image-id,Values=*${1#*=}*")
+                ;;
+            --owner-id=*)
+                aws_command="aws ec2 describe-images --owners ${1#*=}"
+                ;;
+            --owner-id-like=*)
+                echo "Owner ID like filtering is not supported. Use exact --owner-id instead."
+                return 1
+                ;;
+            --alias=*)
+                echo "Alias filtering is not directly supported. Use --owner-id instead."
+                return 1
+                ;;
+            --alias-like=*)
+                echo "Alias filtering is not directly supported. Use --owner-id instead."
+                return 1
+                ;;
+            --architecture=*)
+                filters+=("Name=architecture,Values=${1#*=}")
+                ;;
+            --architecture-like=*)
+                filters+=("Name=architecture,Values=*${1#*=}*")
+                ;;
+            --limit=*)
+                limit="${1#*=}"
+                ;;
+            --private)
+                aws_command="aws ec2 describe-images --owners self"
+                ;;
+            *)
+                echo "Invalid option. Usage:"
+                echo "get_ec2_amis [OPTIONS]"
+                echo ""
+                echo "Options:"
+                echo "  --name=VALUE           Filter by exact AMI name"
+                echo "  --name-like=VALUE      Filter by partial AMI name"
+                echo "  --ami-id=VALUE         Filter by exact AMI ID"
+                echo "  --ami-id-like=VALUE    Filter by partial AMI ID"
+                echo "  --owner-id=VALUE       Filter by exact owner ID"
+                echo "  --architecture=VALUE   Filter by exact architecture"
+                echo "  --architecture-like=VALUE  Filter by partial architecture"
+                echo "  --limit=NUMBER         Limit the number of results"
+                echo "  --private              Search private AMIs instead of public ones"
+                echo ""
+                echo "Examples:"
+                echo "  get_ec2_amis"
+                echo "  get_ec2_amis --name=\"amzn2-ami-hvm\""
+                echo "  get_ec2_amis --name-like=\"ubuntu\""
+                echo "  get_ec2_amis --ami-id=\"ami-12345678\""
+                echo "  get_ec2_amis --owner-id=\"123456789012\""
+                echo "  get_ec2_amis --architecture=\"x86_64\""
+                echo "  get_ec2_amis --limit=5"
+                echo "  get_ec2_amis --private"
+                return 1
+                ;;
+        esac
+        shift
+    done
+
+    local filter_string=""
+    for filter in "${filters[@]}"; do
+        filter_string+="$filter "
+    done
+
+    local result=$(${aws_command} ${filter_string:+--filters $filter_string} \
+        --query 'Images[*].[Name,ImageId,OwnerId,ImageLocation,Architecture,CreationDate]' \
+        --output json | jq -r 'sort_by(.[5]) | reverse | .[]? | @tsv')
+
+    # Define headers
+    local headers=("AMI Name" "AMI Id" "Owner Id" "Owner Alias" "Architecture" "Created At")
+
+    # Initialize arrays to store column widths and data
+    local -a widths data
+    for ((i=0; i<${#headers[@]}; i++)); do
+        widths[$i]=${#headers[$i]}
+    done
+
+    # Read data and calculate column widths
+    while IFS=$'\t' read -r name id owner alias arch created; do
+        [ -z "$name" ] && continue  # Skip empty lines
+        alias=$(echo "$alias" | cut -d'/' -f1)  # Extract owner alias from ImageLocation
+        data+=("$name" "$id" "$owner" "$alias" "$arch" "$created")
+        [ ${#name} -gt ${widths[0]} ] && widths[0]=${#name}
+        [ ${#id} -gt ${widths[1]} ] && widths[1]=${#id}
+        [ ${#owner} -gt ${widths[2]} ] && widths[2]=${#owner}
+        [ ${#alias} -gt ${widths[3]} ] && widths[3]=${#alias}
+        [ ${#arch} -gt ${widths[4]} ] && widths[4]=${#arch}
+        [ ${#created} -gt ${widths[5]} ] && widths[5]=${#created}
+    done <<< "$result"
+
+    # Function to print a separator line
+    print_separator() {
+        local sep="+"
+        for width in "${widths[@]}"; do
+            sep+="-$(printf '%0.s-' $(seq 1 $width))-+"
+        done
+        echo "$sep"
+    }
+
+    # Print the table
+    print_separator
+    for ((i=0; i<${#headers[@]}; i++)); do
+        printf "| %-${widths[$i]}s " "${headers[$i]}"
+    done
+    echo "|"
+    print_separator
+
+    # Only print rows if there's data
+    if [ ${#data[@]} -gt 0 ]; then
+        local count=0
+        for ((i=0; i<${#data[@]}; i+=6)); do
+            ((count++))
+            [ -n "$limit" ] && [ $count -gt $limit ] && break
+            for ((j=0; j<6; j++)); do
+                printf "| %-${widths[$j]}s " "${data[$i+$j]}"
+            done
+            echo "|"
+        done
+        print_separator
+    else
+        echo "No results found."
+    fi
+}
