@@ -106,6 +106,7 @@ get_cloudformation_stacks() {
     local base_query='StackSummaries[*].[StackName,StackStatus,CreationTime]'
     local limit=""
     local aws_command="aws cloudformation list-stacks"
+    local include_deleted=false
 
     while [[ $# -gt 0 ]]; do
         case "$1" in
@@ -121,6 +122,9 @@ get_cloudformation_stacks() {
             --limit=*)
                 limit="--max-items ${1#*=}"
                 ;;
+            --include-deleted)
+                include_deleted=true
+                ;;
             *)
                 echo "Invalid option. Usage examples:"
                 echo "get_cloudformation_stacks"
@@ -128,6 +132,7 @@ get_cloudformation_stacks() {
                 echo "get_cloudformation_stacks --stack-name-like=\"my\""
                 echo "get_cloudformation_stacks --status=\"CREATE_COMPLETE\""
                 echo "get_cloudformation_stacks --limit=5"
+                echo "get_cloudformation_stacks --include-deleted"
                 return 1
                 ;;
         esac
@@ -155,10 +160,12 @@ get_cloudformation_stacks() {
     # Read data and calculate column widths
     while IFS=$'\t' read -r name status created; do
         [ -z "$name" ] && continue  # Skip empty lines
-        data+=("$name" "$status" "$created")
-        [ ${#name} -gt ${widths[0]} ] && widths[0]=${#name}
-        [ ${#status} -gt ${widths[1]} ] && widths[1]=${#status}
-        [ ${#created} -gt ${widths[2]} ] && widths[2]=${#created}
+        if [ "$status" != "DELETE_COMPLETE" ] || [ "$include_deleted" = true ]; then
+            data+=("$name" "$status" "$created")
+            [ ${#name} -gt ${widths[0]} ] && widths[0]=${#name}
+            [ ${#status} -gt ${widths[1]} ] && widths[1]=${#status}
+            [ ${#created} -gt ${widths[2]} ] && widths[2]=${#created}
+        fi
     done <<< "$result"
 
     # Function to print a separator line
