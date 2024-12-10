@@ -1074,3 +1074,118 @@ get_ec2_amis() {
         echo "No results found."
     fi
 }
+
+generate_ec2_cf() {
+    local instance_type="t3.micro"
+    local disk_size="32"
+    # Ubuntu Noble 24.04 LTS
+    local ami_id="ami-09d556b632f1655da"
+    local key_pair="Macbook Air"
+    local stack_name=""
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --instance-type=*) instance_type="${1#*=}" ;;
+            --disk=*) disk_size="${1#*=}" ;;
+            --ami-id=*) ami_id="${1#*=}" ;;
+            --key-pair=*) key_pair="${1#*=}" ;;
+            --stack-name=*) stack_name="${1#*=}" ;;
+            *) echo "Unknown parameter: $1"; return 1 ;;
+        esac
+        shift
+    done
+
+    if [[ -z "$stack_name" ]]; then
+        echo "Error: --stack-name is a required parameter"
+        return 1
+    fi
+
+    cat << EOF
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Create an Amazon EC2 instance with ${instance_type} instance type, ${disk_size}GB gp3 disk, and allow ports 22, 80, and 443."
+
+Resources:
+  EC2Instance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      InstanceType: "${instance_type}"
+      ImageId: "${ami_id}"
+      KeyName: "${key_pair}"
+      BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: ${disk_size}
+            VolumeType: "gp3"
+      SecurityGroups:
+        - !Ref EC2SecurityGroup
+      Tags:
+        - Key: "Name"
+          Value: "${stack_name}"
+
+  EC2SecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Allow ports 22, 80, and 443"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+Outputs:
+  InstanceId:
+    Description: "ID of the EC2 instance"
+    Value: !Ref EC2Instance
+
+  InstancePublicIP:
+    Description: "Public IP address of the EC2 instance"
+    Value: !GetAtt EC2Instance.PublicIp
+EOF
+}
+
+create_ec2_instance() {
+    local instance_type=""
+    local stack_name=""
+    local disk_size="32"
+    # Ubuntu Noble 24.04 LTS
+    local ami_id="ami-09d556b632f1655da"
+    local key_pair="Macbook Air"
+
+    while [[ "$#" -gt 0 ]]; do
+        case $1 in
+            --instance-type=*) instance_type="${1#*=}" ;;
+            --stack-name=*) stack_name="${1#*=}" ;;
+            --disk=*) disk_size="${1#*=}" ;;
+            --ami-id=*) ami_id="${1#*=}" ;;
+            --key-pair=*) key_pair="${1#*=}" ;;
+            *) echo "Unknown parameter: $1"; return 1 ;;
+        esac
+        shift
+    done
+
+    if [[ -z "$instance_type" || -z "$stack_name" ]]; then
+        echo "Error: --instance-type and --stack-name are required parameters"
+        return 1
+    fi
+
+    generate_ec2_cf --instance-type="$instance_type" --disk="$disk_size" --ami-id="$ami_id" --key-pair="$key_pair" --stack-name="$stack_name" | \
+    aws cloudformation create-stack \
+        --stack-name "$stack_name" \
+        --template-body file:///dev/stdin \
+        --capabilities CAPABILITY_IAM
+
+    echo "Creating EC2 instance with:"
+    echo "  Instance Type: $instance_type"
+    echo "  Disk Size: ${disk_size}GB"
+    echo "  AMI ID: $ami_id"
+    echo "  Key Pair: $key_pair"
+    echo "  Stack Name: $stack_name"
+}
