@@ -149,7 +149,7 @@ get_cloudformation_stacks() {
     local result=$(${aws_command} ${limit} --query "$query" --output text | grep -v '^None')
 
     # Define headers
-    local headers=("Stack Name" "Status" "Created On")
+    local headers=("Stack Name" "Status" "Created At")
 
     # Initialize arrays to store column widths and data
     local -a widths data
