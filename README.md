@@ -13,7 +13,8 @@ If you're primarily interested in up-to-date AWS pricing information without run
 - Explore EC2 instance types and their pricing
 - Obtain temporary AWS credentials
 - List and filter IAM roles
-
+- Generate CloudFormation templates for EC2 instances
+- Create EC2 instances using CloudFormation
 ## Functions
 
 ### EC2 and CloudFormation
@@ -21,19 +22,21 @@ If you're primarily interested in up-to-date AWS pricing information without run
 1. `get_ec2_instances`: Retrieve and display EC2 instance information in a formatted table.
 2. `get_cloudformation_stacks`: List and filter CloudFormation stacks.
 3. `get_ec2_instance_types`: Explore EC2 instance types, their specifications, and pricing.
+4. `generate_ec2_cf`: Generate a CloudFormation template for an EC2 instance.
+5. `create_ec2_instance`: Create an EC2 instance using CloudFormation.
 
 ### Lightsail
 
-4. `get_lightsail_instances`: Retrieve and display Lightsail instance information.
-5. `get_lightsail_blueprints`: List available Lightsail blueprints.
-6. `get_lightsail_bundles`: Display Lightsail bundle information, including pricing.
-7. `generate_lightsail_cf`: Generate a CloudFormation template for a Lightsail instance.
-8. `create_lightsail_instance`: Create a Lightsail instance using CloudFormation.
+6. `get_lightsail_instances`: Retrieve and display Lightsail instance information.
+7. `get_lightsail_blueprints`: List available Lightsail blueprints.
+8. `get_lightsail_bundles`: Display Lightsail bundle information, including pricing.
+9. `generate_lightsail_cf`: Generate a CloudFormation template for a Lightsail instance.
+10. `create_lightsail_instance`: Create a Lightsail instance using CloudFormation.
 
 ### AWS IAM and Security
 
-9. `get_aws_temp_credentials`: Obtain temporary AWS credentials by assuming a role.
-10. `get_iam_roles`: List and filter IAM roles.
+11. `get_aws_temp_credentials`: Obtain temporary AWS credentials by assuming a role.
+12. `get_iam_roles`: List and filter IAM roles.
 
 ## Usage
 
@@ -79,7 +82,7 @@ get_cloudformation_stacks
 Output:
 ```
 +----------------------+---------------+-------------------------+
-| Stack Name           | Status        | Created On              |
+| Stack Name           | Status        | Created At              |
 +----------------------+---------------+-------------------------+
 | MyWebAppStack        | CREATE_COMPLETE| 2023-05-01T14:20:30.000Z|
 | NetworkInfraStructure| UPDATE_COMPLETE| 2023-04-15T09:10:05.000Z|
@@ -91,6 +94,7 @@ Possible arguments:
 - `--stack-name-like=<partial-name>`: Filter by partial stack name
 - `--status=<status>`: Filter by stack status
 - `--limit=<number>`: Limit the number of results
+- `--include-deleted`: Include deleted stacks in the results
 ### 3. Explore EC2 instance types
 
 ```bash
@@ -253,7 +257,6 @@ Possible arguments:
 - `--blueprint-id=<id>`: Specify the blueprint ID (default: ubuntu_24_04)
 - `--bundle-id=<id>`: Specify the bundle ID (default: micro_3_0)
 - `--stack-name=<name>`: Specify the CloudFormation stack name (default: lightsail-instance)
-
 ### 9. Get temporary AWS credentials
 
 ```bash
@@ -275,7 +278,6 @@ Possible arguments:
 - `--role-arn=<arn>`: Specify the ARN of the role to assume (required)
 - `--session-name=<name>`: Specify the session name (default: TempSession)
 - `--duration=<seconds>`: Specify the duration of the temporary credentials in seconds (default: 3600)
-
 ### 10. List IAM roles
 
 ```bash
@@ -298,12 +300,98 @@ Possible arguments:
 - `--limit=<number>`: Limit the number of results
 - `--role-name=<name>`: Filter by exact role name
 - `--role-name-like=<partial-name>`: Filter by partial role name
+### 11. Generate a CloudFormation template for an EC2 instance
 
+```bash
+generate_ec2_cf --instance-type=t3.micro --disk=32 --ami-id=ami-09d556b632f1655da --key-pair="Macbook Air" --stack-name=my-ec2-instance
+```
+
+Output:
+```yaml
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Create an Amazon EC2 instance with t3.micro instance type, 32GB gp3 disk, and allow ports 22, 80, and 443."
+
+Resources:
+  EC2Instance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      InstanceType: "t3.micro"
+      ImageId: "ami-09d556b632f1655da"
+      KeyName: "Macbook Air"
+      BlockDeviceMappings:
+        - DeviceName: "/dev/xvda"
+          Ebs:
+            VolumeSize: 32
+            VolumeType: "gp3"
+      SecurityGroups:
+        - !Ref EC2SecurityGroup
+      Tags:
+        - Key: "Name"
+          Value: "my-ec2-instance"
+
+  EC2SecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: "Allow ports 22, 80, and 443"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+
+Outputs:
+  InstanceId:
+    Description: "ID of the EC2 instance"
+    Value: !Ref EC2Instance
+
+  InstancePublicIP:
+    Description: "Public IP address of the EC2 instance"
+    Value: !GetAtt EC2Instance.PublicIp
+```
+
+Possible arguments:
+- `--instance-type=<type>`: Specify the EC2 instance type (default: t3.micro)
+- `--disk=<size>`: Specify the disk size in GB (default: 32)
+- `--ami-id=<id>`: Specify the AMI ID (default: ami-09d556b632f1655da)
+- `--key-pair=<name>`: Specify the key pair name (default: Macbook Air)
+- `--stack-name=<name>`: Specify the stack name (required)
+### 12. Create an EC2 instance
+
+```bash
+create_ec2_instance --instance-type=t3.micro --stack-name=my-ec2-instance
+```
+
+Output:
+```
+Creating EC2 instance with:
+  Instance Type: t3.micro
+  Disk Size: 32GB
+  AMI ID: ami-09d556b632f1655da
+  Key Pair: Macbook Air
+  Stack Name: my-ec2-instance
+{
+    "StackId": "arn:aws:cloudformation:us-east-1:123456789012:stack/my-ec2-instance/abcdef12-3456-7890-abcd-ef1234567890"
+}
+```
+
+Possible arguments:
+- `--instance-type=<type>`: Specify the EC2 instance type (required)
+- `--stack-name=<name>`: Specify the CloudFormation stack name (required)
+- `--disk=<size>`: Specify the disk size in GB (default: 32)
+- `--ami-id=<id>`: Specify the AMI ID (default: ami-09d556b632f1655da)
+- `--key-pair=<name>`: Specify the key pair name (default: Macbook Air)
 ## Requirements
 
 - AWS CLI installed and configured with appropriate credentials
 - Bash shell environment
-
 ## Contributing
 
 Contributions to easy-aws-helper are welcome! Please feel free to submit a Pull Request.
@@ -311,3 +399,4 @@ Contributions to easy-aws-helper are welcome! Please feel free to submit a Pull 
 ## License
 
 This project is open-source and available under the [MIT License](LICENSE).
+```
