@@ -15,6 +15,7 @@ If you're primarily interested in up-to-date AWS pricing information without run
 - List and filter IAM roles
 - Generate CloudFormation templates for EC2 instances
 - Create EC2 instances using CloudFormation
+- Manage EC2 security groups and rules
 ## Functions
 
 ### EC2 and CloudFormation
@@ -24,19 +25,22 @@ If you're primarily interested in up-to-date AWS pricing information without run
 3. `get_ec2_instance_types`: Explore EC2 instance types, their specifications, and pricing.
 4. `generate_ec2_cf`: Generate a CloudFormation template for an EC2 instance.
 5. `create_ec2_instance`: Create an EC2 instance using CloudFormation.
+6. `get_ec2_security_groups`: Retrieve and display security group information for an EC2 instance.
+7. `create_ec2_sg_rule`: Create a new security group rule for an EC2 instance.
+8. `delete_ec2_sg_rule`: Delete a security group rule for an EC2 instance.
 
 ### Lightsail
 
-6. `get_lightsail_instances`: Retrieve and display Lightsail instance information.
-7. `get_lightsail_blueprints`: List available Lightsail blueprints.
-8. `get_lightsail_bundles`: Display Lightsail bundle information, including pricing.
-9. `generate_lightsail_cf`: Generate a CloudFormation template for a Lightsail instance.
-10. `create_lightsail_instance`: Create a Lightsail instance using CloudFormation.
+9. `get_lightsail_instances`: Retrieve and display Lightsail instance information.
+10. `get_lightsail_blueprints`: List available Lightsail blueprints.
+11. `get_lightsail_bundles`: Display Lightsail bundle information, including pricing.
+12. `generate_lightsail_cf`: Generate a CloudFormation template for a Lightsail instance.
+13. `create_lightsail_instance`: Create a Lightsail instance using CloudFormation.
 
 ### AWS IAM and Security
 
-11. `get_aws_temp_credentials`: Obtain temporary AWS credentials by assuming a role.
-12. `get_iam_roles`: List and filter IAM roles.
+14. `get_aws_temp_credentials`: Obtain temporary AWS credentials by assuming a role.
+15. `get_iam_roles`: List and filter IAM roles.
 
 ## Usage
 
@@ -388,6 +392,62 @@ Possible arguments:
 - `--disk=<size>`: Specify the disk size in GB (default: 32)
 - `--ami-id=<id>`: Specify the AMI ID (default: ami-09d556b632f1655da)
 - `--key-pair=<name>`: Specify the key pair name (default: Macbook Air)
+### 13. Get EC2 security groups
+
+```bash
+get_ec2_security_groups --instance-id=i-1234567890abcdef0
+```
+
+Output:
+```
+Security Group Id: sg-1234567890abcdef0
++------------------------+-----------+---------+----------+---------------+
+| Security Group Rule Id | From Port | To Port | Protocol | Source IPv4   |
++------------------------+-----------+---------+----------+---------------+
+| sgr-1234567890abcdef0  | 22        | 22      | tcp      | 0.0.0.0/0     |
+| sgr-0987654321fedcba0  | 80        | 80      | tcp      | 0.0.0.0/0     |
+| sgr-abcdef1234567890   | 443       | 443     | tcp      | 0.0.0.0/0     |
++------------------------+-----------+---------+----------+---------------+
+```
+
+Possible arguments:
+- `--instance-id=<id>`: Specify the EC2 instance ID (required)
+### 14. Create EC2 security group rule
+
+```bash
+create_ec2_sg_rule --sg-id=sg-1234567890abcdef0 --from-port=8080 --to-port=8080 --source-ipv4=10.0.0.0/24 --protocol=tcp
+```
+
+Output:
+```
+Security group rule created successfully.
+Rule ID: sgr-1234567890abcdef0
+Security Group ID: sg-1234567890abcdef0
+Protocol: tcp
+Port Range: 8080-8080
+Source IPv4: 10.0.0.0/24
+```
+
+Possible arguments:
+- `--sg-id=<id>`: Specify the security group ID (required)
+- `--from-port=<port>`: Specify the starting port (required)
+- `--to-port=<port>`: Specify the ending port (optional, defaults to from-port)
+- `--source-ipv4=<cidr>`: Specify the source IPv4 CIDR (optional, defaults to 0.0.0.0/0)
+- `--protocol=<protocol>`: Specify the protocol (optional, defaults to tcp)
+### 15. Delete EC2 security group rule
+
+```bash
+delete_ec2_sg_rule --sgr-id=sgr-1234567890abcdef0
+```
+
+Output:
+```
+Security group rule deleted successfully.
+Deleted Rule ID: sgr-1234567890abcdef0
+```
+
+Possible arguments:
+- `--sgr-id=<id>`: Specify the security group rule ID (required)
 ## Requirements
 
 - AWS CLI installed and configured with appropriate credentials
@@ -399,4 +459,3 @@ Contributions to easy-aws-helper are welcome! Please feel free to submit a Pull 
 ## License
 
 This project is open-source and available under the [MIT License](LICENSE).
-```

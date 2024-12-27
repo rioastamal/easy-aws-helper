@@ -1196,3 +1196,202 @@ create_ec2_instance() {
     echo "  Key Pair: $key_pair"
     echo "  Stack Name: $stack_name"
 }
+
+get_ec2_security_groups() {
+    local instance_id=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --instance-id=*)
+                instance_id="${1#*=}"
+                ;;
+            *)
+                echo "Invalid option. Usage example:"
+                echo "get_ec2_security_groups --instance-id=\"i-1234567890abcdef0\""
+                return 1
+                ;;
+        esac
+        shift
+    done
+
+    if [ -z "$instance_id" ]; then
+        echo "Error: --instance-id is required"
+        return 1
+    fi
+
+    local aws_command="aws ec2 describe-instance-attribute --instance-id $instance_id --attribute groupSet"
+    local security_group_ids=$(${aws_command} --query 'Groups[*].GroupId' --output text)
+
+    if [ -z "$security_group_ids" ]; then
+        echo "No security groups found for instance $instance_id"
+        return 0
+    fi
+
+    for sg_id in $security_group_ids; do
+        echo "Security Group Id: $sg_id"
+        
+        local rules=$(aws ec2 describe-security-group-rules --filters Name=group-id,Values=$sg_id --query "SecurityGroupRules[?IsEgress==\`false\`].[SecurityGroupRuleId,FromPort,ToPort,IpProtocol,CidrIpv4]" --output text)
+
+        # Define headers
+        local headers=("Security Group Rule Id" "From Port" "To Port" "Protocol" "Source IPv4")
+
+        # Initialize arrays to store column widths and data
+        local -a widths data
+        for ((i=0; i<${#headers[@]}; i++)); do
+            widths[$i]=${#headers[$i]}
+        done
+
+        # Process data and calculate column widths
+        while IFS=$'\t' read -r rule_id from_port to_port protocol cidr; do
+            [ -z "$rule_id" ] && continue  # Skip empty lines
+            [ -z "$cidr" ] && continue  # Skip non-IPv4 rules
+            [ "$from_port" = "None" ] && from_port="-1"
+            [ "$to_port" = "None" ] && to_port="-1"
+            [ "$from_port" = "-1" ] && from_port="All"
+            [ "$to_port" = "-1" ] && to_port="All"
+            [ "$protocol" = "-1" ] && protocol="All"
+            data+=("$rule_id" "$from_port" "$to_port" "$protocol" "$cidr")
+            [ ${#rule_id} -gt ${widths[0]} ] && widths[0]=${#rule_id}
+            [ ${#from_port} -gt ${widths[1]} ] && widths[1]=${#from_port}
+            [ ${#to_port} -gt ${widths[2]} ] && widths[2]=${#to_port}
+            [ ${#protocol} -gt ${widths[3]} ] && widths[3]=${#protocol}
+            [ ${#cidr} -gt ${widths[4]} ] && widths[4]=${#cidr}
+        done <<< "$rules"
+
+        # Print the table
+        print_table
+
+        echo ""  # Add a blank line between security groups
+    done
+}
+
+# Function to print a separator line
+print_separator() {
+    local sep="+"
+    for width in "${widths[@]}"; do
+        sep+="-$(printf '%0.s-' $(seq 1 $width))-+"
+    done
+    echo "$sep"
+}
+
+# Function to print the table
+print_table() {
+    print_separator
+    for ((i=0; i<${#headers[@]}; i++)); do
+        printf "| %-${widths[$i]}s " "${headers[$i]}"
+    done
+    echo "|"
+    print_separator
+
+    for ((i=0; i<${#data[@]}; i+=5)); do
+        for ((j=0; j<5; j++)); do
+            printf "| %-${widths[$j]}s " "${data[$i+$j]}"
+        done
+        echo "|"
+    done
+    print_separator
+}
+create_ec2_sg_rule() {
+    local sg_id=""
+    local from_port=""
+    local to_port=""
+    local source_ipv4="0.0.0.0/0"
+    local protocol="tcp"
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --sg-id=*)
+                sg_id="${1#*=}"
+                ;;
+            --from-port=*)
+                from_port="${1#*=}"
+                ;;
+            --to-port=*)
+                to_port="${1#*=}"
+                ;;
+            --source-ipv4=*)
+                source_ipv4="${1#*=}"
+                ;;
+            --protocol=*)
+                protocol="${1#*=}"
+                ;;
+            *)
+                echo "Invalid option. Usage example:"
+                echo "create_ec2_sg_rule --sg-id=sg-1234567890abcdef0 --from-port=80 [--to-port=80] [--source-ipv4=0.0.0.0/0] [--protocol=tcp]"
+                return 1
+                ;;
+        esac
+        shift
+    done
+
+    # Check required parameters
+    if [ -z "$sg_id" ] || [ -z "$from_port" ]; then
+        echo "Error: --sg-id and --from-port are required"
+        return 1
+    fi
+
+    # Set to_port to from_port if not specified
+    if [ -z "$to_port" ]; then
+        to_port="$from_port"
+    fi
+
+    # Create the security group rule
+    local result=$(aws ec2 authorize-security-group-ingress \
+        --group-id "$sg_id" \
+        --ip-permissions IpProtocol="$protocol",FromPort="$from_port",ToPort="$to_port",IpRanges=[{CidrIp="$source_ipv4"}] \
+        --output json)
+
+    # Check if the command was successful
+    if [ $? -eq 0 ]; then
+        local rule_id=$(echo "$result" | jq -r '.SecurityGroupRules[0].SecurityGroupRuleId')
+        echo "Security group rule created successfully."
+        echo "Rule ID: $rule_id"
+        echo "Security Group ID: $sg_id"
+        echo "Protocol: $protocol"
+        echo "Port Range: $from_port-$to_port"
+        echo "Source IPv4: $source_ipv4"
+    else
+        echo "Failed to create security group rule. Error:"
+        echo "$result"
+        return 1
+    fi
+}
+delete_ec2_sg_rule() {
+    local sgr_id=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --sgr-id=*)
+                sgr_id="${1#*=}"
+                ;;
+            *)
+                echo "Invalid option. Usage example:"
+                echo "delete_ec2_sg_rule --sgr-id=sgr-1234567890abcdef0"
+                return 1
+                ;;
+        esac
+        shift
+    done
+
+    # Check required parameter
+    if [ -z "$sgr_id" ]; then
+        echo "Error: --sgr-id is required"
+        return 1
+    fi
+
+    # Delete the security group rule
+    local result=$(aws ec2 revoke-security-group-ingress \
+        --group-id $(aws ec2 describe-security-group-rules --security-group-rule-ids "$sgr_id" --query 'SecurityGroupRules[0].GroupId' --output text) \
+        --security-group-rule-ids "$sgr_id" \
+        2>&1)
+
+    # Check if the command was successful
+    if [ $? -eq 0 ]; then
+        echo "Security group rule deleted successfully."
+        echo "Deleted Rule ID: $sgr_id"
+    else
+        echo "Failed to delete security group rule. Error:"
+        echo "$result"
+        return 1
+    fi
+}
